@@ -62,8 +62,9 @@ menu = st.sidebar.selectbox(
     [
         "📊 Cuadro Resumen y Finanzas",
         "💵 Registrar Aportación",
+        "✏️ Corregir / Mover Aportación",
         "📅 Registrar / Crear Mes",
-        "🛒 Registrar Gasto",
+        "🛒 Registrar / Gestionar Gastos",
         "👥 Gestionar Integrantes"
     ]
 )
@@ -140,7 +141,7 @@ if menu == "📊 Cuadro Resumen y Finanzas":
         st.write("No hay gastos registrados en el sistema.")
 
 # ------------------------------------------------------------------------------
-# 2. REGISTRAR APORTACIÓN (Monto Exacto)
+# 2. REGISTRAR APORTACIÓN
 # ------------------------------------------------------------------------------
 elif menu == "💵 Registrar Aportación":
     st.header("💵 Registrar Aportación Individual")
@@ -163,7 +164,57 @@ elif menu == "💵 Registrar Aportación":
             st.success(f"¡Aportación de {nuevo_monto:.2f} € registrada para {integrante_sel} en {mes_sel}!")
 
 # ------------------------------------------------------------------------------
-# 3. REGISTRAR / CREAR MES
+# 3. CORREGIR / MOVER APORTACIÓN (NUEVA FUNCIÓN)
+# ------------------------------------------------------------------------------
+elif menu == "✏️ Corregir / Mover Aportación":
+    st.header("✏️ Corregir o Mover Aportaciones Incorrectas")
+
+    meses_registrados = list(datos["aportaciones"].keys())
+    if not meses_registrados:
+        st.warning("No hay meses registrados en la base de datos.")
+    else:
+        st.subheader("🔁 Mover aportación de un mes a otro")
+        col_m1, col_m2 = st.columns(2)
+        
+        with col_m1:
+            mes_origen = st.selectbox("Mes donde está la aportación INCORRECTA:", meses_registrados, key="m_origen")
+            integrante_corregir = st.selectbox("Integrante a corregir:", datos["integrantes"], key="p_corregir")
+            monto_origen = float(datos["aportaciones"][mes_origen].get(integrante_corregir, 0.0))
+            st.write(f"Monto registrado actualmente en **{mes_origen}**: **{monto_origen:.2f} €**")
+
+        with col_m2:
+            mes_destino = st.selectbox("Mes CORRECTO al que deseas moverla:", meses_registrados, key="m_destino")
+            monto_destino_previo = float(datos["aportaciones"][mes_destino].get(integrante_corregir, 0.0))
+            st.write(f"Monto actual previo en **{mes_destino}**: **{monto_destino_previo:.2f} €**")
+
+        if st.button("Mover Aportación al Mes Correcto", type="primary"):
+            if mes_origen == mes_destino:
+                st.warning("El mes de origen y destino son el mismo.")
+            elif monto_origen == 0:
+                st.warning(f"{integrante_corregir} no tiene ninguna aportación registrada en {mes_origen}.")
+            else:
+                # Se traslada el monto de un mes a otro
+                datos["aportaciones"][mes_destino][integrante_corregir] = monto_destino_previo + monto_origen
+                datos["aportaciones"][mes_origen][integrante_corregir] = 0.0
+                guardar_datos(datos)
+                st.success(f"¡Se movieron {monto_origen:.2f} € de {integrante_corregir} desde {mes_origen} hacia {mes_destino} correctamente!")
+
+        st.divider()
+
+        st.subheader("🧹 Borrar o reiniciar aportación")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            mes_borrar = st.selectbox("Selecciona el mes:", meses_registrados, key="m_borrar")
+        with col_b2:
+            persona_borrar = st.selectbox("Selecciona la persona:", datos["integrantes"], key="p_borrar")
+
+        if st.button("Pon en 0.00 € la aportación"):
+            datos["aportaciones"][mes_borrar][persona_borrar] = 0.0
+            guardar_datos(datos)
+            st.success(f"Aportación de {persona_borrar} en {mes_borrar} restablecida a 0.00 €.")
+
+# ------------------------------------------------------------------------------
+# 4. REGISTRAR / CREAR MES
 # ------------------------------------------------------------------------------
 elif menu == "📅 Registrar / Crear Mes":
     st.header("📅 Crear o Activar Mes")
@@ -179,24 +230,39 @@ elif menu == "📅 Registrar / Crear Mes":
             st.success(f"¡Mes de {nuevo_mes} creado e inicializado correctamente!")
 
 # ------------------------------------------------------------------------------
-# 4. REGISTRAR GASTO
+# 5. REGISTRAR Y GESTIONAR GASTOS
 # ------------------------------------------------------------------------------
-elif menu == "🛒 Registrar Gasto":
-    st.header("🛒 Registrar Nuevo Gasto")
+elif menu == "🛒 Registrar / Gestionar Gastos":
+    st.header("🛒 Registro y Gestión de Gastos")
 
-    concepto = st.text_input("Descripción / Concepto del gasto (ej. Cables, Baterías):")
-    monto_gasto = st.number_input("Monto gastado (€):", min_value=0.1, step=0.5)
+    tab_g1, tab_g2 = st.tabs(["➕ Registrar Gasto", "❌ Eliminar Gasto Incorrecto"])
 
-    if st.button("Registrar Gasto", type="primary"):
-        if not concepto.strip():
-            st.error("Debes ingresar una descripción para el gasto.")
+    with tab_g1:
+        concepto = st.text_input("Descripción / Concepto del gasto (ej. Banderas, Cables):")
+        monto_gasto = st.number_input("Monto gastado (€):", min_value=0.1, step=0.5)
+
+        if st.button("Registrar Gasto", type="primary"):
+            if not concepto.strip():
+                st.error("Debes ingresar una descripción para el gasto.")
+            else:
+                datos["gastos"].append({"concepto": concepto.strip(), "monto": monto_gasto})
+                guardar_datos(datos)
+                st.success(f"¡Gasto registrado: '{concepto}' por {monto_gasto:.2f} €!")
+
+    with tab_g2:
+        if datos["gastos"]:
+            opciones_gastos = [f"{g['concepto']} ({float(g['monto']):.2f} €)" for g in datos["gastos"]]
+            gasto_sel_idx = st.selectbox("Selecciona el gasto que deseas eliminar:", range(len(opciones_gastos)), format_func=lambda i: opciones_gastos[i])
+            
+            if st.button("Eliminar Gasto Seleccionado", type="primary"):
+                gasto_removido = datos["gastos"].pop(gasto_sel_idx)
+                guardar_datos(datos)
+                st.success(f"¡El gasto '{gasto_removido['concepto']}' ha sido eliminado!")
         else:
-            datos["gastos"].append({"concepto": concepto.strip(), "monto": monto_gasto})
-            guardar_datos(datos)
-            st.success(f"¡Gasto registrado: '{concepto}' por {monto_gasto:.2f} €!")
+            st.info("No hay gastos registrados en el sistema.")
 
 # ------------------------------------------------------------------------------
-# 5. GESTIONAR INTEGRANTES
+# 6. GESTIONAR INTEGRANTES
 # ------------------------------------------------------------------------------
 elif menu == "👥 Gestionar Integrantes":
     st.header("👥 Agregar o Eliminar Integrantes")
